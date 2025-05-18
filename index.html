@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -150,15 +111,17 @@
         }
 
         .button:disabled:hover::after {
-            content: 'لطفاً ابتدا محاسبات را انجام دهید';
+            content: attr(data-tooltip);
             position: absolute;
-            top: -30px;
+            top: -40px;
             right: 0;
             background: #1F2A44;
             color: white;
-            padding: 5px 10px;
-            border-radius: 5px;
+            padding: 8px 12px;
+            border-radius: 6px;
             font-size: 0.9em;
+            white-space: nowrap;
+            z-index: 10;
         }
 
         .button.print {
@@ -470,7 +433,7 @@
             </select>
         </div>
 
-        <button class="button" id="calculateBtn">محاسبه و نمایش جدول</button>
+        <button class="button" id="calculateBtn" disabled data-tooltip="لطفاً مبلغ کل فروش را وارد کنید">محاسبه و نمایش جدول</button>
 
         <div id="checksList"></div>
         
@@ -528,6 +491,20 @@
             document.getElementById('saleDate').value = today.toISOString().split('T')[0];
             document.getElementById('customDP').dataset.raw = '0';
             
+            // اعتبارسنجی اولیه
+            validateInputs();
+
+            // رویدادهای ورودی برای اعتبارسنجی پویا
+            const inputs = [
+                'totalAmount', 'saleDate', 'checkInterval', 'downPaymentType',
+                'customDP', 'interestRate', 'numChecks', 'feeSettlementType'
+            ];
+            inputs.forEach(id => {
+                const element = document.getElementById(id);
+                element.addEventListener('input', validateInputs);
+                element.addEventListener('change', validateInputs);
+            });
+
             document.getElementById('totalAmount').addEventListener('input', function() {
                 const value = this.value.replace(/[^0-9]/g, '');
                 this.dataset.raw = value;
@@ -622,8 +599,10 @@
             const saleDate = document.getElementById('saleDate').value;
             const interval = parseInt(document.getElementById('checkInterval').value);
             const dpType = document.getElementById('downPaymentType').value;
+            const calculateBtn = document.getElementById('calculateBtn');
             
             let isValid = true;
+            let tooltipMessage = '';
 
             document.querySelectorAll('.error').forEach(e => {
                 e.classList.remove('active');
@@ -634,18 +613,21 @@
                 document.getElementById('amountError').textContent = 'مبلغ کل فروش باید بیشتر از صفر باشد';
                 document.getElementById('amountError').classList.add('active');
                 isValid = false;
+                tooltipMessage = 'لطفاً مبلغ کل فروش را وارد کنید';
             }
 
             if(!saleDate) {
                 document.getElementById('dateError').textContent = 'تاریخ فروش الزامی است';
                 document.getElementById('dateError').classList.add('active');
                 isValid = false;
+                tooltipMessage = tooltipMessage || 'لطفاً تاریخ فروش را وارد کنید';
             }
 
             if(isNaN(interval) || interval < 1) {
                 document.getElementById('intervalError').textContent = 'فاصله زمانی باید عددی بیشتر از صفر باشد';
                 document.getElementById('intervalError').classList.add('active');
                 isValid = false;
+                tooltipMessage = tooltipMessage || 'لطفاً فاصله زمانی معتبر وارد کنید';
             }
 
             if(dpType === 'custom') {
@@ -654,15 +636,18 @@
                     document.getElementById('dpError').textContent = 'مبلغ پیش پرداخت نمی‌تواند منفی باشد';
                     document.getElementById('dpError').classList.add('active');
                     isValid = false;
+                    tooltipMessage = tooltipMessage || 'لطفاً مبلغ پیش پرداخت معتبر وارد کنید';
                 }
-                if(customDP > total) {
+                if(customDP > total && total > 0) {
                     document.getElementById('dpError').textContent = 'پیش پرداخت نمی‌تواند از مبلغ کل بیشتر باشد';
                     document.getElementById('dpError').classList.add('active');
                     isValid = false;
+                    tooltipMessage = tooltipMessage || 'پیش پرداخت نمی‌تواند از مبلغ کل بیشتر باشد';
                 }
             }
 
-            document.getElementById('calculateBtn').disabled = !isValid;
+            calculateBtn.disabled = !isValid;
+            calculateBtn.setAttribute('data-tooltip', isValid ? '' : tooltipMessage);
             document.getElementById('printCustomerBtn').disabled = true;
             document.getElementById('printFinanceBtn').disabled = true;
             return isValid;
