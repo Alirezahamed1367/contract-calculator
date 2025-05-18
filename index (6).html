@@ -1,0 +1,954 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سیستم محاسبه اقساط چک‌های آرمان سیر</title>
+    <link href="https://cdn.jsdelivr.net/npm/@fontsource/iransans@5.0.0/index.css" rel="stylesheet">
+    <style>
+        /* استایل‌های عمومی */
+        body {
+            font-family: 'IRANSans', sans-serif;
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #F9FAFB;
+            font-size: 16px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        body.dark-mode {
+            background-color: #1F2A44;
+            color: #E5E7EB;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            transition: background-color 0.3s;
+        }
+
+        body.dark-mode .container {
+            background-color: #2D3748;
+        }
+
+        /* حالت دارک‌مود برای دکمه‌ها */
+        body.dark-mode .button {
+            filter: brightness(1.2);
+        }
+
+        /* استایل‌های فرم */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #1F2A44;
+            font-weight: 500;
+            font-size: 1.2em;
+        }
+
+        body.dark-mode label {
+            color: #D1D5DB;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 1em;
+            font-family: 'IRANSans', sans-serif;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3B82F6;
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+        }
+
+        #installmentBalance {
+            background-color: #EFF6FF;
+            font-weight: 600;
+            color: #1E40AF;
+        }
+
+        body.dark-mode #installmentBalance {
+            background-color: #374151;
+            color: #BFDBFE;
+        }
+
+        .button {
+            background: linear-gradient(90deg, #3B82F6, #60A5FA);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1.1em;
+            width: 100%;
+            margin: 20px 0;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            position: relative;
+        }
+
+        .button:disabled:hover::after {
+            content: 'لطفاً ابتدا محاسبات را انجام دهید';
+            position: absolute;
+            top: -30px;
+            right: 0;
+            background: #1F2A44;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        .button.print {
+            background: linear-gradient(90deg, #10B981, #34D399);
+        }
+
+        .button.print-finance {
+            background: linear-gradient(90deg, #6366F1, #818CF8);
+        }
+
+        /* دکمه دارک‌مود */
+        .dark-mode-toggle {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #3B82F6;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        body.dark-mode .dark-mode-toggle {
+            background: #D1D5DB;
+            color: #1F2A44;
+        }
+
+        /* استایل‌های جدول */
+        #checksTable {
+            width: 100%;
+            margin-top: 30px;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-family: 'IRANSans', sans-serif;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #checksTable th {
+            background: linear-gradient(90deg, #3B82F6, #60A5FA);
+            color: white;
+            padding: 14px;
+            border: none;
+            font-weight: 600;
+            border-radius: 8px 8px 0 0;
+        }
+
+        #checksTable td {
+            padding: 12px;
+            border-bottom: 1px solid #E5E7EB;
+            background-color: white;
+            text-align: center;
+        }
+
+        body.dark-mode #checksTable td {
+            background-color: #374151;
+            border-bottom: 1px solid #4B5563;
+        }
+
+        #checksTable tr:nth-child(even) td {
+            background-color: #F9FAFB;
+        }
+
+        body.dark-mode #checksTable tr:nth-child(even) td {
+            background-color: #2D3748;
+        }
+
+        .print-section {
+            display: none;
+        }
+
+        .error {
+            color: #EF4444;
+            display: none;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .error.active {
+            display: block;
+        }
+
+        .summary-info {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #EFF6FF;
+            border-radius: 8px;
+            border: 1px solid #DBEAFE;
+            font-family: 'IRANSans', sans-serif;
+        }
+
+        body.dark-mode .summary-info {
+            background-color: #374151;
+            border: 1px solid #4B5563;
+        }
+
+        .finance-details {
+            border: 1px solid #E5E7EB;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            background-color: #F9FAFB;
+            font-family: 'IRANSans', sans-serif;
+        }
+
+        body.dark-mode .finance-details {
+            background-color: #2D3748;
+            border: 1px solid #4B5563;
+        }
+
+        .payment-type {
+            font-weight: bold;
+            color: #1E40AF;
+            margin: 10px 0;
+        }
+
+        body.dark-mode .payment-type {
+            color: #BFDBFE;
+        }
+
+        /* استایل‌های چاپ */
+        @media print {
+            body {
+                background-color: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                font-size: 12pt !important;
+                line-height: 1.6;
+                font-family: 'IRANSans', sans-serif !important;
+            }
+
+            body > *:not(.print-version.active) {
+                display: none !important;
+            }
+
+            .print-version {
+                display: none !important;
+            }
+
+            .print-version.active {
+                display: block !important;
+                padding: 8mm !important;
+            }
+
+            .print-table {
+                width: 100% !important;
+                font-size: 11pt !important;
+                border-collapse: collapse;
+                break-inside: avoid !important;
+            }
+
+            thead {
+                display: table-header-group !important;
+            }
+
+            tbody {
+                display: table-row-group !important;
+            }
+
+            tr {
+                break-inside: avoid !important;
+                break-after: auto !important;
+            }
+
+            th, td {
+                padding: 8px 4px !important;
+                border: 1px solid #ddd !important;
+                text-align: center;
+            }
+
+            th {
+                background-color: #3B82F6 !important;
+                color: white !important;
+                font-weight: 700;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            @page {
+                size: A4;
+                margin: 8mm;
+            }
+
+            .summary-info, .finance-details {
+                background-color: transparent !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 5mm 0 !important;
+            }
+        }
+
+        /* ریسپانسیو برای موبایل */
+        @media (max-width: 768px) {
+            body {
+                margin: 10px;
+                padding: 10px;
+                font-size: 14px;
+            }
+
+            .container {
+                padding: 20px;
+            }
+
+            #checksTable th, #checksTable td {
+                padding: 8px 4px;
+                font-size: 0.85em;
+            }
+
+            .button {
+                padding: 12px 20px;
+                font-size: 1em;
+            }
+
+            .dark-mode-toggle {
+                top: 10px;
+                left: 10px;
+                padding: 8px;
+            }
+        }
+
+        /* انیمیشن fadeIn */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <button class="dark-mode-toggle" title="تغییر حالت روشن/تیره">🌙</button>
+    <div class="container no-print">
+        <h1>سیستم محاسبه اقساط چک‌های آرمان سیر</h1>
+
+        <div class="form-group">
+            <label>تاریخ فروش:</label>
+            <input type="date" id="saleDate" required>
+            <div class="error" id="dateError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>مبلغ کل فروش (ریال):</label>
+            <input type="text" id="totalAmount" placeholder="10,000,000">
+            <div class="error" id="amountError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>مبلغ پیش پرداخت:</label>
+            <select id="downPaymentType">
+                <option value="10">10%</option>
+                <option value="20">20%</option>
+                <option value="30">30%</option>
+                <option value="40">40%</option>
+                <option value="50">50%</option>
+                <option value="custom">مبلغ انتخابی</option>
+            </select>
+            <div style="margin-top: 10px;">
+                <input type="text" id="customDP" placeholder="0" disabled value="0">
+                <div class="error" id="dpError"></div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>مانده اقساط (ریال):</label>
+            <input type="text" id="installmentBalance" readonly>
+        </div>
+
+        <div class="form-group">
+            <label>نرخ سود ماهانه (%):</label>
+            <select id="interestRate">
+                <option value="3">3%</option>
+                <option value="3.5">3.5%</option>
+                <option value="4">4%</option>
+                <option value="4.5">4.5%</option>
+                <option value="5">5%</option>
+                <option value="5.5">5.5%</option>
+                <option value="6">6%</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>تعداد چک واگذاری:</label>
+            <select id="numChecks">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+                <option value="12">12</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>فاصله زمانی بین چک‌ها (روز):</label>
+            <input type="number" id="checkInterval" min="1" value="30" required>
+            <div class="error" id="intervalError"></div>
+        </div>
+
+        <div class="form-group">
+            <label>نحوه تسویه کارمزد:</label>
+            <select id="feeSettlementType">
+                <option value="cash">تسویه نقدی</option>
+                <option value="installment">تسویه اقساطی</option>
+            </select>
+        </div>
+
+        <button class="button" id="calculateBtn">محاسبه و نمایش جدول</button>
+
+        <div id="checksList"></div>
+        
+        <div class="print-options">
+            <button class="button print" id="printCustomerBtn" disabled>🖨️ چاپ نسخه مشتری</button>
+            <button class="button print-finance" id="printFinanceBtn" disabled>📊 چاپ نسخه مالی</button>
+        </div>
+        
+        <div class="error" id="generalError"></div>
+    </div>
+
+    <!-- بخش‌های چاپ -->
+    <div id="printCustomer" class="print-version" style="display:none;"></div>
+    <div id="printFinance" class="print-version" style="display:none;"></div>
+
+    <script>
+        // توابع کمکی
+        const parseNumber = (str) => {
+            if (!str) return 0;
+            const numStr = String(str).replace(/[^\d]/g, '');
+            return parseInt(numStr) || 0;
+        };
+
+        const formatNumber = (num) => {
+            const numberValue = typeof num === 'number' ? num : parseNumber(num);
+            return isNaN(numberValue) ? '0' : new Intl.NumberFormat('en-US').format(numberValue);
+        };
+
+        const roundTo1000 = (num) => Math.round(num / 1000) * 1000;
+
+        const calculateDailyInterest = (principal, monthlyRate, days) => {
+            const dailyRate = monthlyRate / 30;
+            return principal * dailyRate * days / 100;
+        };
+
+        const calculateInstallmentInterest = (principal, monthlyRate, numPeriods, daysBetween) => {
+            let totalInterest = 0;
+            let remainingPrincipal = principal;
+            
+            for(let i = 0; i < numPeriods; i++) {
+                const interest = calculateDailyInterest(remainingPrincipal, monthlyRate, daysBetween);
+                totalInterest += interest;
+                remainingPrincipal += interest;
+            }
+            
+            return roundTo1000(totalInterest);
+        };
+
+        // متغیر برای ردیابی حالت چاپ
+        let currentPrintMode = null;
+
+        // تنظیمات اولیه
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            document.getElementById('saleDate').value = today.toISOString().split('T')[0];
+            document.getElementById('customDP').dataset.raw = '0';
+            
+            document.getElementById('totalAmount').addEventListener('input', function() {
+                const value = this.value.replace(/[^0-9]/g, '');
+                this.dataset.raw = value;
+                this.value = formatNumber(value);
+                updateBalance();
+            });
+            
+            document.getElementById('customDP').addEventListener('input', function() {
+                const value = this.value.replace(/[^0-9]/g, '');
+                this.dataset.raw = value;
+                this.value = formatNumber(value);
+                updateBalance();
+            });
+            
+            document.getElementById('downPaymentType').addEventListener('change', function() {
+                const isCustom = this.value === 'custom';
+                document.getElementById('customDP').disabled = !isCustom;
+                updateBalance();
+            });
+            
+            document.getElementById('printCustomerBtn').addEventListener('click', printCustomerVersion);
+            document.getElementById('printFinanceBtn').addEventListener('click', printFinanceVersion);
+
+            // دارک‌مود
+            const darkModeToggle = document.querySelector('.dark-mode-toggle');
+            darkModeToggle.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                darkModeToggle.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+            });
+        });
+
+        // محاسبه مانده اقساط
+        const updateBalance = () => {
+            const total = parseNumber(document.getElementById('totalAmount').dataset.raw);
+            const dpType = document.getElementById('downPaymentType').value;
+            const dpError = document.getElementById('dpError');
+            const customDPInput = document.getElementById('customDP');
+            let dpAmount = 0;
+
+            if(dpType === 'custom') {
+                customDPInput.dataset.raw = '0';
+                customDPInput.value = '0';
+                dpAmount = parseNumber(customDPInput.dataset.raw);
+                if(dpAmount > total) {
+                    dpError.textContent = 'پیش پرداخت نمی‌تواند از مبلغ کل بیشتر باشد';
+                    dpError.classList.add('active');
+                    document.getElementById('installmentBalance').value = '0';
+                    document.getElementById('installmentBalance').dataset.raw = '0';
+                    return;
+                }
+            } else {
+                dpAmount = roundTo1000(total * (parseInt(dpType)/100));
+                customDPInput.value = formatNumber(dpAmount);
+                customDPInput.dataset.raw = dpAmount.toString();
+            }
+
+            const balance = total - dpAmount;
+            document.getElementById('installmentBalance').value = formatNumber(balance);
+            document.getElementById('installmentBalance').dataset.raw = balance.toString();
+            dpError.classList.remove('active');
+        };
+
+        // محاسبه تاریخ چک‌ها
+        const calculateCheckDates = (startDate, intervalDays, numChecks) => {
+            const dates = [];
+            let currentDate = new Date(startDate);
+            
+            for(let i = 0; i < numChecks; i++) {
+                currentDate = new Date(currentDate);
+                currentDate.setDate(currentDate.getDate() + intervalDays);
+                dates.push(new Date(currentDate));
+            }
+            
+            return dates;
+        };
+
+        // فرمت تاریخ شمسی
+        const formatDate = (date) => {
+            const options = {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                calendar: 'persian',
+                numberingSystem: 'arab'
+            };
+            return new Intl.DateTimeFormat('fa-IR', options).format(date);
+        };
+
+        // اعتبارسنجی ورودی‌ها
+        const validateInputs = () => {
+            const total = parseNumber(document.getElementById('totalAmount').dataset.raw);
+            const saleDate = document.getElementById('saleDate').value;
+            const interval = parseInt(document.getElementById('checkInterval').value);
+            const dpType = document.getElementById('downPaymentType').value;
+            
+            let isValid = true;
+
+            document.querySelectorAll('.error').forEach(e => {
+                e.classList.remove('active');
+                e.textContent = '';
+            });
+
+            if(total <= 0) {
+                document.getElementById('amountError').textContent = 'مبلغ کل فروش باید بیشتر از صفر باشد';
+                document.getElementById('amountError').classList.add('active');
+                isValid = false;
+            }
+
+            if(!saleDate) {
+                document.getElementById('dateError').textContent = 'تاریخ فروش الزامی است';
+                document.getElementById('dateError').classList.add('active');
+                isValid = false;
+            }
+
+            if(isNaN(interval) || interval < 1) {
+                document.getElementById('intervalError').textContent = 'فاصله زمانی باید عددی بیشتر از صفر باشد';
+                document.getElementById('intervalError').classList.add('active');
+                isValid = false;
+            }
+
+            if(dpType === 'custom') {
+                const customDP = parseNumber(document.getElementById('customDP').dataset.raw);
+                if(customDP < 0) {
+                    document.getElementById('dpError').textContent = 'مبلغ پیش پرداخت نمی‌تواند منفی باشد';
+                    document.getElementById('dpError').classList.add('active');
+                    isValid = false;
+                }
+                if(customDP > total) {
+                    document.getElementById('dpError').textContent = 'پیش پرداخت نمی‌تواند از مبلغ کل بیشتر باشد';
+                    document.getElementById('dpError').classList.add('active');
+                    isValid = false;
+                }
+            }
+
+            document.getElementById('calculateBtn').disabled = !isValid;
+            document.getElementById('printCustomerBtn').disabled = true;
+            document.getElementById('printFinanceBtn').disabled = true;
+            return isValid;
+        };
+
+        // مدیریت چاپ نسخه مشتری
+        const printCustomerVersion = () => {
+            const printCustomer = document.getElementById('printCustomer');
+            const printFinance = document.getElementById('printFinance');
+            if (!printCustomer.innerHTML) {
+                document.getElementById('generalError').textContent = 'لطفاً ابتدا محاسبات را انجام دهید';
+                document.getElementById('generalError').classList.add('active');
+                return;
+            }
+            currentPrintMode = 'customer';
+            console.log('Printing customer version'); // لاگ دیباگ
+            printFinance.classList.remove('active');
+            printFinance.style.display = 'none';
+            printCustomer.classList.add('active');
+            printCustomer.style.display = 'block';
+            window.print();
+            printCustomer.classList.remove('active');
+            printCustomer.style.display = 'none';
+            currentPrintMode = null;
+        };
+
+        // مدیریت چاپ نسخه مالی
+        const printFinanceVersion = () => {
+            const printFinance = document.getElementById('printFinance');
+            const printCustomer = document.getElementById('printCustomer');
+            if (!printFinance.innerHTML) {
+                document.getElementById('generalError').textContent = 'لطفاً ابتدا محاسبات را انجام دهید';
+                document.getElementById('generalError').classList.add('active');
+                return;
+            }
+            currentPrintMode = 'finance';
+            console.log('Printing finance version'); // لاگ دیباگ
+            printCustomer.classList.remove('active');
+            printCustomer.style.display = 'none';
+            printFinance.classList.add('active');
+            printFinance.style.display = 'block';
+            window.print();
+            printFinance.classList.remove('active');
+            printFinance.style.display = 'none';
+            currentPrintMode = null;
+        };
+
+        // تولید نتایج
+        const generateResults = (rows, checks, total, dpAmount, feeAmount, installmentTotal, totalPayment, feeType) => {
+            let tableHTML = `
+                <table id="checksTable">
+                    <thead>
+                        <tr><th>ردیف</th><th>تاریخ چک</th><th>مبلغ چک (ریال)</th><th>عنوان پرداخت</th><th>فاصله زمانی (روز)</th></tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            [...rows, ...checks].forEach((item, index) => {
+                tableHTML += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${formatDate(item.date)}</td>
+                        <td>${formatNumber(item.amount)}</td>
+                        <td>${item.title}</td>
+                        <td>${item.days}</td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `</tbody></table>`;
+
+            tableHTML += `
+                <div class="summary-info">
+                    <h3>خلاصه مالی:</h3>
+                    <p>مبلغ کل فروش: ${formatNumber(total)} ریال</p>
+                    ${dpAmount > 0 ? `<p>پیش پرداخت: ${formatNumber(dpAmount)} ریال</p>` : ''}
+                    <p>کارمزد: ${formatNumber(feeAmount)} ریال</p>
+                    <p>جمع اقساط: ${formatNumber(installmentTotal)} ریال</p>
+                    <p><strong>جمع کل قرارداد: ${formatNumber(totalPayment)} ریال</strong></p>
+                    ${feeType === 'installment' ? `<p class="notice">توجه: کارمزد به صورت اقساطی با سود مرکب محاسبه شده است</p>` : ''}
+                </div>
+            `;
+
+            document.getElementById('checksList').innerHTML = tableHTML;
+
+            generatePrintContent(
+                rows,
+                checks, 
+                total, 
+                dpAmount, 
+                feeAmount, 
+                installmentTotal, 
+                totalPayment,
+                feeType
+            );
+        };
+
+        // تولید محتوای چاپی
+        const generatePrintContent = (rows, checks, total, dpAmount, feeAmount, installmentTotal, totalPayment, feeType) => {
+            const allItems = [...rows, ...checks];
+            const monthlyRate = parseFloat(document.getElementById('interestRate').value);
+            const intervalDays = parseInt(document.getElementById('checkInterval').value);
+            const formattedSaleDate = formatDate(new Date(document.getElementById('saleDate').value));
+            const principal = total - dpAmount;
+            const principalInterest = calculateInstallmentInterest(principal, monthlyRate, checks.length, intervalDays);
+            const feeInterest = feeAmount - principalInterest;
+
+            // نسخه مشتری
+            const customerContent = `
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th colspan="4">شرکت آرمان سیر - صورت حساب اقساط (نسخه مشتری)</th>
+                        </tr>
+                        <tr>
+                            <th colspan="4">تاریخ: ${formattedSaleDate}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="4" style="padding: 10px; text-align: right;">
+                                <h3>خلاصه قرارداد:</h3>
+                                <p>مبلغ کل قرارداد: ${formatNumber(total)} ریال</p>
+                                ${dpAmount > 0 ? `<p>پیش پرداخت: ${formatNumber(dpAmount)} ریال</p>` : ''}
+                                <p>تعداد اقساط: ${checks.length} فقره</p>
+                                <p>فاصله پرداخت: ${intervalDays} روز</p>
+                                <p>نرخ سود ماهانه: ${monthlyRate}%</p>
+                                <p>جمع کل پرداختی: ${formatNumber(totalPayment)} ریال</p>
+                                <p>ثبت به شناسه ملی: 1234567890</p>
+                                ${feeType === 'installment' ? '<p class="notice">توجه: کارمزد به صورت اقساطی محاسبه شده است</p>' : ''}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>ردیف</th>
+                            <th>تاریخ چک</th>
+                            <th>مبلغ (ریال)</th>
+                            <th>توضیحات</th>
+                        </tr>
+                        ${allItems.map((item, idx) => `
+                            <tr>
+                                <td>${idx + 1}</td>
+                                <td>${formatDate(item.date)}</td>
+                                <td>${formatNumber(item.amount)}</td>
+                                <td>${item.title}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            // نسخه مالی
+            const financeContent = `
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th colspan="5">شرکت آرمان سیر - صورت حساب مالی (نسخه داخلی)</th>
+                        </tr>
+                        <tr>
+                            <th colspan="5">تاریخ: ${formattedSaleDate}</th>
+                        </tr>
+                        <tr>
+                            <th colspan="5">نحوه تسویه کارمزد: ${feeType === 'cash' ? 'نقدی' : 'اقساطی'}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="5" style="padding: 10px; text-align: right;">
+                                <h3>جزئیات محاسبات مالی:</h3>
+                                <p>مبلغ کل قرارداد: ${formatNumber(total)} ریال</p>
+                                <p>پیش پرداخت: ${formatNumber(dpAmount)} ریال</p>
+                                <p>مانده اقساط: ${formatNumber(principal)} ریال</p>
+                                <p>نرخ سود ماهانه: ${monthlyRate}%</p>
+                                <p>تعداد اقساط: ${checks.length} فقره</p>
+                                <p>فاصله زمانی: ${intervalDays} روز</p>
+                                <p>سود مرکب اصل مبلغ: ${formatNumber(principalInterest)} ریال</p>
+                                ${feeType === 'installment' ? `<p>سود مرکب کارمزد: ${formatNumber(feeInterest)} ریال</p>` : ''}
+                                <p>کل کارمزد: ${formatNumber(feeAmount)} ریال</p>
+                                <p>جمع کل اقساط: ${formatNumber(installmentTotal)} ریال</p>
+                                <p><strong>جمع کل پرداختی: ${formatNumber(totalPayment)} ریال</strong></p>
+                                <p>ثبت به شناسه ملی: 1234567890</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>ردیف</th>
+                            <th>تاریخ چک</th>
+                            <th>مبلغ (ریال)</th>
+                            <th>نوع پرداخت</th>
+                            <th>شرح</th>
+                        </tr>
+                        ${allItems.map((item, idx) => `
+                            <tr>
+                                <td>${idx + 1}</td>
+                                <td>${formatDate(item.date)}</td>
+                                <td>${formatNumber(item.amount)}</td>
+                                <td>${item.title.includes('قسط') ? 'اقساطی' : 'نقدی'}</td>
+                                <td>${item.title} (${item.days} روز بعد)</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            console.log('Generating print content: Customer'); // لاگ دیباگ
+            document.getElementById('printCustomer').innerHTML = customerContent;
+            console.log('Generating print content: Finance'); // لاگ دیباگ
+            document.getElementById('printFinance').innerHTML = financeContent;
+        };
+
+        // محاسبات اصلی
+        const calculate = () => {
+            try {
+                if(!validateInputs()) return;
+
+                const saleDate = new Date(document.getElementById('saleDate').value);
+                const total = parseNumber(document.getElementById('totalAmount').dataset.raw);
+                const monthlyRate = parseFloat(document.getElementById('interestRate').value);
+                const numChecks = parseInt(document.getElementById('numChecks').value);
+                const intervalDays = parseInt(document.getElementById('checkInterval').value);
+                const balance = parseNumber(document.getElementById('installmentBalance').dataset.raw);
+                const feeType = document.getElementById('feeSettlementType').value;
+                const dpAmount = parseNumber(document.getElementById('customDP').dataset.raw);
+
+                let totalWithFee = balance;
+                let feeAmount = 0;
+
+                if(feeType === 'installment') {
+                    feeAmount = calculateInstallmentInterest(balance, monthlyRate, numChecks, intervalDays);
+                    totalWithFee = balance + feeAmount;
+                } else {
+                    feeAmount = calculateDailyInterest(balance, monthlyRate, intervalDays * numChecks);
+                }
+
+                const checkDates = calculateCheckDates(saleDate, intervalDays, numChecks);
+                let rows = [];
+                let totalPayment = dpAmount || 0;
+
+                if(dpAmount > 0) {
+                    rows.push({
+                        amount: dpAmount,
+                        date: saleDate,
+                        title: 'پیش پرداخت نقدی',
+                        days: 0
+                    });
+                }
+
+                const checkAmount = roundTo1000(totalWithFee / numChecks);
+                const checks = Array(numChecks - 1).fill(checkAmount);
+                const lastCheck = totalWithFee - (checkAmount * (numChecks - 1));
+                checks.push(roundTo1000(lastCheck));
+
+                checks.forEach((amount, i) => {
+                    checks[i] = {
+                        amount: amount,
+                        date: checkDates[i],
+                        title: `قسط شماره ${i+1}`,
+                        days: (i+1)*intervalDays
+                    };
+                });
+
+                const installmentTotal = checks.reduce((sum, check) => sum + (check.amount || 0), 0);
+                totalPayment += installmentTotal;
+
+                if(feeType === 'cash' && feeAmount > 0) {
+                    rows.push({
+                        amount: feeAmount,
+                        date: saleDate,
+                        title: 'کارمزد نقدی',
+                        days: 0
+                    });
+                    totalPayment += feeAmount;
+                }
+
+                generateResults(rows, checks, total, dpAmount, feeAmount, installmentTotal, totalPayment, feeType);
+
+                document.getElementById('printCustomerBtn').disabled = false;
+                document.getElementById('printFinanceBtn').disabled = false;
+                document.getElementById('generalError').classList.remove('active');
+
+            } catch(error) {
+                console.error('خطا:', error);
+                document.getElementById('generalError').textContent = 'خطا در محاسبات: لطفاً مقادیر ورودی را بررسی کنید';
+                document.getElementById('generalError').classList.add('active');
+            }
+        };
+
+        document.getElementById('calculateBtn').addEventListener('click', calculate);
+    </script>
+</body>
+</html>
