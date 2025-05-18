@@ -466,7 +466,8 @@
 
         const calculateDailyInterest = (principal, monthlyRate, days) => {
             const dailyRate = monthlyRate / 30;
-            return principal * dailyRate * days / 100;
+            const interest = principal * dailyRate * days / 100;
+            return roundTo1000(interest); // رند کردن کارمزد نقدی
         };
 
         const calculateInstallmentInterest = (principal, monthlyRate, numPeriods, daysBetween) => {
